@@ -1,4 +1,5 @@
 #include <libmongoc-1.0/mongoc.h>
+#include <time.h>
 #include <regex.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -27,6 +28,7 @@ to_mongo(struct metric_t *m)
 	BSON_APPEND_DOUBLE(doc, "warning", m->warning);
 	BSON_APPEND_DOUBLE(doc, "critical", m->critical);
 	BSON_APPEND_DOUBLE(doc, "value", m->value);
+	BSON_APPEND_INT64(doc, "timestamp", time(NULL));
 	if (!mongoc_collection_insert(collection, MONGOC_INSERT_NONE, doc, NULL, &error)) {
 		FILE *fp = fopen("/tmp/teste", "a");
 		fprintf(fp, "error: %s\n", error.message);

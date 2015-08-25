@@ -1,11 +1,15 @@
 #include <libmongoc-1.0/mongoc.h>
 #include <naemon/naemon.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <signal.h>
 #include <unistd.h>
 #include "utils.h"
 
 NEB_API_VERSION(CURRENT_NEB_API_VERSION); 
 void		*ghandle;
 mongoc_client_t	*client;
+pid_t		 mongoin_pid;
 
 int
 broker_check(int event_type, void *data)
@@ -21,48 +25,16 @@ broker_check(int event_type, void *data)
 	if (broker_data->type != NEBTYPE_SERVICECHECK_PROCESSED)
 		return OK;
 
-	/*
-	FILE *fp = fopen("/tmp/teste", "a");
-	fprintf(fp, "<%d>[%s]\n", broker_data->type, broker_data->perf_data);
-	fclose(fp);
-	*/
-
 	metrics = parse_perfdata(broker_data->perf_data);
-
 	for(cursor=metrics; cursor; cursor=cursor->next) {
 		asprintf(&cursor->host_name, "%s", broker_data->host_name);
 		asprintf(&cursor->service_description, "%s", broker_data->service_description);
 		to_mongo(cursor);
-		//metric_to_json(cursor, &jsonstr);
-		//fprintf(fp, "%s\n", jsonstr);
 	}
-
-	FILE *fp = fopen("/tmp/teste", "a");
-	fprintf(fp, ".\n");
-	fclose(fp);
 
 	return OK;
 }
 
-void
-register_callbacks()
-{
-	neb_register_callback(
-	    NEBCALLBACK_SERVICE_CHECK_DATA,
-	    ghandle,
-	    0,
-	    broker_check
-	);
-}
-
-void
-deregister_callbacks()
-{
-	neb_deregister_callback(
-	    NEBCALLBACK_SERVICE_CHECK_DATA,
-	    broker_check
-	);
-}
 
 int
 nebmodule_init(int flags, char *args, void *handle)
@@ -74,18 +46,43 @@ nebmodule_init(int flags, char *args, void *handle)
 	neb_set_module_info(ghandle, NEBMODULE_MODINFO_VERSION, "1");
 	neb_set_module_info(ghandle, NEBMODULE_MODINFO_LICENSE, "gpl");
 	neb_set_module_info(ghandle, NEBMODULE_MODINFO_DESC, "dumps perfdata to mongodb.");
-	register_callbacks();
+
+	if (args == NULL)
+		return OK;
+
+	neb_register_callback(
+	    NEBCALLBACK_SERVICE_CHECK_DATA,
+	    ghandle,
+	    0,
+	    broker_check
+	);
 
 	mongoc_init();
-	client = mongoc_client_new("mongodb://192.168.10.160:27017/");
+	client = mongoc_client_new(args);
 
-	return OK;
+	mongoin_pid = fork();
+	if (mongoin_pid != 0)
+		return OK;
+
+	while(1) {
+		sleep(1);
+	}
+	exit(0);
 }
 
 int
 nebmodule_deinit(int flags, int reason)
 {
-	deregister_callbacks();
+	int	ret;
+
+	neb_deregister_callback(
+	    NEBCALLBACK_SERVICE_CHECK_DATA,
+	    broker_check
+	);
 	mongoc_client_destroy(client);
+
+	kill(mongoin_pid, SIGKILL);
+	waitpid(mongoin_pid, &ret, 0);
+
 	return OK;
 }
