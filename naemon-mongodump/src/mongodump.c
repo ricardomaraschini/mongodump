@@ -12,7 +12,7 @@ mongoc_client_t	*client;
 pid_t		 mongoin_pid;
 
 int
-broker_check(int event_type, void *data)
+mongo_broker_check(int event_type, void *data)
 {
 	nebstruct_service_check_data	*broker_data = NULL;
 	struct metric_t			*metrics = NULL;
@@ -54,7 +54,7 @@ nebmodule_init(int flags, char *args, void *handle)
 	    NEBCALLBACK_SERVICE_CHECK_DATA,
 	    ghandle,
 	    0,
-	    broker_check
+	    mongo_broker_check
 	);
 
 	mongoc_init();
@@ -77,7 +77,7 @@ nebmodule_deinit(int flags, int reason)
 
 	neb_deregister_callback(
 	    NEBCALLBACK_SERVICE_CHECK_DATA,
-	    broker_check
+	    mongo_broker_check
 	);
 	mongoc_client_destroy(client);
 
